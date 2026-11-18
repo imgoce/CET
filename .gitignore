@@ -1,0 +1,7 @@
+# 비밀값·환경 설정
+.env
+*.env.local
+
+# Supabase CLI 로컬 파일
+backend/supabase/.temp/
+backend/supabase/.branches/
