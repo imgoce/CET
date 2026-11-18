@@ -6,16 +6,18 @@
 ###   2. 각 요청 위의 "Send Request"를 위에서부터 순서대로 누른다
 ###
 ### 참고
-###   - 익명 로그인(1번)을 누를 때마다 새 사용자가 생긴다.
+###   - 익명 로그인(1번, 14-1번)을 누를 때마다 새 사용자가 생긴다.
 ###     기본 제한은 IP당 시간당 30회. 테스트 사용자는
 ###     대시보드 Authentication → Users 에서 지우면 관련 데이터도 같이 지워진다.
-###   - "기대 결과"와 다르면 응답 본문의 code / message 를 확인한다.
+###   - 실패 응답은 { "code": "PTxxx", "message": "오류 키", "details": "설명" } 형식이다.
+###     "기대 결과"와 다르면 message 를 확인한다.
 ### =====================================================================
 
 @url = {{$dotenv SUPABASE_URL}}
 @key = {{$dotenv SUPABASE_PUBLISHABLE_KEY}}
 
 @token = {{signup.response.body.$.access_token}}
+@token2 = {{signup2.response.body.$.access_token}}
 
 
 ### ---------------------------------------------------------------------
@@ -169,7 +171,7 @@ Authorization: Bearer {{token}}
 
 
 ### 13. 이미 등록한 사용자가 다시 등록
-# 기대: 409, code 23505 (사용자당 1번만 등록)
+# 기대: 409, ALREADY_REGISTERED
 POST {{url}}/rest/v1/rpc/register_user
 apikey: {{key}}
 Authorization: Bearer {{token}}
@@ -178,8 +180,8 @@ Content-Type: application/json
 { "p_nickname": "새닉네임" }
 
 
-### 14. 다른 사용자가 같은 닉네임으로 등록
-# 14-1. 두 번째 익명 사용자 만들기
+### 14-1. 두 번째 익명 사용자 만들기
+# 기대: 200
 # @name signup2
 POST {{url}}/auth/v1/signup
 apikey: {{key}}
@@ -187,21 +189,64 @@ Content-Type: application/json
 
 {}
 
-### 14-2. 4번에서 등록한 닉네임으로 등록 시도
-# 기대: 409, code 23505 → 앱에서 '이미 사용 중인 닉네임' 표시
+
+### 14-2. 닉네임 등록 전에 수집 기록 저장
+# 기대: 403, NOT_REGISTERED
+POST {{url}}/rest/v1/rpc/add_collection_record
+apikey: {{key}}
+Authorization: Bearer {{token2}}
+Content-Type: application/json
+
+{
+  "p_sensor_name": "sensor 07",
+  "p_temperature": 21.5,
+  "p_humidity": 55.0,
+  "p_aqi": null,
+  "p_tvoc": null,
+  "p_co2": null,
+  "p_rssi": -70,
+  "p_measured_at": "{{$datetime iso8601}}",
+  "p_public_server_id": null,
+  "p_is_shadow_area": false,
+  "p_is_test": true
+}
+
+
+### 14-3. 4번에서 등록한 닉네임으로 등록 시도
+# 기대: 409, NICKNAME_TAKEN → 앱에서 '이미 사용 중인 닉네임' 표시
 POST {{url}}/rest/v1/rpc/register_user
 apikey: {{key}}
-Authorization: Bearer {{signup2.response.body.$.access_token}}
+Authorization: Bearer {{token2}}
 Content-Type: application/json
 
 { "p_nickname": "{{profile.response.body.$[0].nickname}}" }
 
 
+### 14-4. 너무 짧은 닉네임
+# 기대: 400, NICKNAME_INVALID
+POST {{url}}/rest/v1/rpc/register_user
+apikey: {{key}}
+Authorization: Bearer {{token2}}
+Content-Type: application/json
+
+{ "p_nickname": "a" }
+
+
+### 14-5. 두 번째 사용자 정상 등록 (15번 준비)
+# 기대: 200
+POST {{url}}/rest/v1/rpc/register_user
+apikey: {{key}}
+Authorization: Bearer {{token2}}
+Content-Type: application/json
+
+{ "p_nickname": "user{{$randomInt 1000 9999}}" }
+
+
 ### 15. 다른 사용자의 수집 기록 재전송
-# 기대: 403, code 42501 '다른 사용자의 수집 기록입니다'
+# 기대: 403, RECORD_OF_OTHER_USER
 POST {{url}}/rest/v1/rpc/add_collection_record
 apikey: {{key}}
-Authorization: Bearer {{signup2.response.body.$.access_token}}
+Authorization: Bearer {{token2}}
 Content-Type: application/json
 
 {
@@ -220,7 +265,7 @@ Content-Type: application/json
 
 
 ### 16. 범위를 벗어난 값 (습도 101%)
-# 기대: 400, code 23514 (check 제약 위반)
+# 기대: 400, INVALID_VALUE
 POST {{url}}/rest/v1/rpc/add_collection_record
 apikey: {{key}}
 Authorization: Bearer {{token}}
@@ -238,4 +283,26 @@ Content-Type: application/json
   "p_public_server_id": null,
   "p_is_shadow_area": false,
   "p_is_test": true
+}
+
+
+### 17. 실제 모드인데 공용 서버 id 없음
+# 기대: 400, MISSING_SERVER_ID
+POST {{url}}/rest/v1/rpc/add_collection_record
+apikey: {{key}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "p_sensor_name": "sensor 07",
+  "p_temperature": 21.5,
+  "p_humidity": 55.0,
+  "p_aqi": null,
+  "p_tvoc": null,
+  "p_co2": null,
+  "p_rssi": -70,
+  "p_measured_at": "{{$datetime iso8601}}",
+  "p_public_server_id": null,
+  "p_is_shadow_area": false,
+  "p_is_test": false
 }

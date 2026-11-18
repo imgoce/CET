@@ -74,7 +74,7 @@ supabase.postgrest.rpc("함수이름", buildJsonObject { put("p_nickname", "우�
 실패하면 HTTP 4xx와 함께 아래 JSON이 온다. **앱은 `message`의 오류 키로 구분한다.**
 
 ```json
-{ "code": "P0001", "message": "NICKNAME_TAKEN", "details": "이미 사용 중인 닉네임입니다", "hint": null }
+{ "code": "PT409", "message": "NICKNAME_TAKEN", "details": "이미 사용 중인 닉네임입니다", "hint": null }
 ```
 
 | HTTP | 오류 키 (`message`) | 의미 | 앱 처리 (제안) |
@@ -93,9 +93,8 @@ supabase.postgrest.rpc("함수이름", buildJsonObject { put("p_nickname", "우�
 | 400 | `NOT_ENOUGH_FOOD` | 보유 먹이 부족 (계획) | 버튼 비활성화 |
 | 403 | `GACHA_LOCKED` | 성체가 아니라 뽑기 불가 (계획) | 뽑기 메뉴 숨김 |
 
-> ⚠️ **현재 구현과 차이**: 확정 함수들은 아직 Postgres 기본 오류(`23505`, `23514` 등)를 그대로 돌려준다.
-> 위 오류 키 형식으로 바꾸는 작업이 다음 백엔드 작업이며, 끝나면 이 표시를 지운다.
-> 앱은 처음부터 위 오류 키 기준으로 개발하면 된다.
+- `details`는 사람이 읽는 설명이다. 화면 문구는 앱에서 오류 키별로 정한다.
+- 세션이 없으면(401) 오류 키 없이 `"message": "permission denied for function …"`이 온다.
 
 ---
 
@@ -274,3 +273,4 @@ supabase.postgrest.rpc("함수이름", buildJsonObject { put("p_nickname", "우�
 | 날짜 | 내용 |
 |---|---|
 | 2026-11-18 | v0.1 최초 작성. 확정 5개, 계획 7개 |
+| 2026-11-18 | 확정 함수 5개에 오류 키 적용 (`NICKNAME_INVALID`, `NICKNAME_TAKEN`, `ALREADY_REGISTERED`, `NOT_REGISTERED`, `INVALID_VALUE`, `MISSING_SERVER_ID`, `RECORD_OF_OTHER_USER`) |
