@@ -2,6 +2,8 @@
 
 Supabase(PostgreSQL) 기반. 앱은 공용 서버(API 1·2·5)와 이 DB를 함께 사용한다.
 
+> 앱 개발자용 API 명세: [API.md](API.md)
+
 ## 구조
 
 ```
