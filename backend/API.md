@@ -90,7 +90,8 @@ supabase.postgrest.rpc("함수이름", buildJsonObject { put("p_nickname", "우�
 | 400 | `FEEDBACK_EXPIRED` | 수집 후 10분 초과 (계획) | "제출 가능 시간이 지났어요" |
 | 409 | `FEEDBACK_DUPLICATE` | 이미 피드백한 수집 기록 (계획) | 창 닫기 |
 | 429 | `FEEDBACK_DAILY_LIMIT` | 오늘 3회 제출함 (계획) | "오늘은 더 제출할 수 없어요" |
-| 400 | `NOT_ENOUGH_FOOD` | 보유 먹이 부족 (계획) | 버튼 비활성화 |
+| 400 | `NOT_ENOUGH_FOOD` | 보유 먹이 부족 | 버튼 비활성화 |
+| 409 | `REQUEST_ID_REUSED` | 다른 사용자가 이미 쓴 요청 ID | 새 UUID로 다시 요청 |
 | 403 | `GACHA_LOCKED` | 성체가 아니라 뽑기 불가 (계획) | 뽑기 메뉴 숨김 |
 
 - `details`는 사람이 읽는 설명이다. 화면 문구는 앱에서 오류 키별로 정한다.
@@ -110,7 +111,7 @@ supabase.postgrest.rpc("함수이름", buildJsonObject { put("p_nickname", "우�
 | `get_my_rank` | 🔲 계획 | FR-05-11 | 내 순위 |
 | `get_my_collection_stats` | ✅ 확정 | FR-05-06 | 수집 횟수·첫 수집 센서 |
 | `submit_feedback` | 🔲 계획 | FR-05-07 | 피드백 저장 + 보상 |
-| `feed_pet` | 🔲 계획 | FR-05-09 | 먹이 주기·레벨업·진화 |
+| `feed_pet` | ✅ 확정 | FR-05-09 | 먹이 주기·레벨업·진화 |
 | `draw_costume` | 🔲 계획 | FR-05-10 | 코스튬 뽑기 |
 | `get_my_costumes` | 🔲 계획 | FR-05-10 | 보관함 |
 | `equip_costume` | 🔲 계획 | FR-05-10 | 코스튬 입히기·벗기기 |
@@ -220,17 +221,20 @@ supabase.postgrest.rpc("함수이름", buildJsonObject { put("p_nickname", "우�
 - **실패**: `RECORD_OF_OTHER_USER`, `FEEDBACK_EXPIRED`, `FEEDBACK_DUPLICATE`, `FEEDBACK_DAILY_LIMIT`
 - 피드백 창을 닫아도(FB-2-2) 아무것도 호출하지 않으면 된다.
 
-### 5.9 `feed_pet` 🔲
+### 5.9 `feed_pet` ✅
 | 파라미터 | 타입 | 설명 |
 |---|---|---|
 | `p_request_id` | uuid | 요청마다 새로 생성. 재전송 시 같은 값 |
 
 **반환**: 먹이를 준 뒤의 상태
 ```json
-{ "level": 2, "feed_in_level": 0, "stage": "egg", "food": 3, "leveled_up": true, "evolved": false }
+{ "level": 2, "feed_in_level": 0, "feed_needed": 3, "stage": "egg", "food": 3, "leveled_up": true, "evolved": false }
 ```
-- `evolved: true`면 진화 연출(GR-3-1)을 보여준다.
-- **실패**: `NOT_ENOUGH_FOOD`
+- 레벨 n에서 먹이 n+1개를 먹이면 레벨업. 게이지(GR-2-1)는 `feed_in_level / feed_needed`
+- `leveled_up: true`면 레벨업, `evolved: true`면 진화 연출(GR-3-1)을 보여준다.
+- 진화 레벨은 DB `settings` 표의 값을 따른다 (현재 임시값: 새끼 3, 해츨링 6, 성체 10)
+- 같은 `p_request_id`로 재전송하면 먹이를 다시 쓰지 않고 처음 응답을 그대로 돌려준다.
+- **실패**: `NOT_REGISTERED`, `NOT_ENOUGH_FOOD`, `REQUEST_ID_REUSED`
 
 ### 5.10 `draw_costume` 🔲
 | 파라미터 | 타입 | 설명 |
@@ -278,3 +282,4 @@ supabase.postgrest.rpc("함수이름", buildJsonObject { put("p_nickname", "우�
 | 2026-11-18 | v0.1 최초 작성. 확정 5개, 계획 7개 |
 | 2026-11-18 | 확정 함수 5개에 오류 키 적용 (`NICKNAME_INVALID`, `NICKNAME_TAKEN`, `ALREADY_REGISTERED`, `NOT_REGISTERED`, `INVALID_VALUE`, `MISSING_SERVER_ID`, `RECORD_OF_OTHER_USER`) |
 | 2026-11-20 | 수집 보상 구현. `add_collection_record` 응답을 `{record, rewards, food}`로 변경, `get_my_collection_stats` 추가 |
+| 2026-11-21 | `feed_pet` 구현 (레벨업·진화, 요청 ID 재전송 처리). 응답에 `feed_needed` 추가, 오류 키 `REQUEST_ID_REUSED` 추가 |

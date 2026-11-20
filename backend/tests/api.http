@@ -399,3 +399,59 @@ Content-Type: application/json
 GET {{url}}/rest/v1/reward_history?select=reason,food,collection_record_id,created_at&order=id
 apikey: {{key}}
 Authorization: Bearer {{token}}
+
+
+### ---------------------------------------------------------------------
+### [먹이 주기] R1~R6 바로 다음에, 같은 사용자(token)로 이어서 한다. (시작 food 7)
+### ---------------------------------------------------------------------
+
+### F1. 먹이 주기 (1번 누름)
+# 기대: level 1, feed_in_level 1, feed_needed 2, food 6, leveled_up false
+POST {{url}}/rest/v1/rpc/feed_pet
+apikey: {{key}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "p_request_id": "{{$guid}}" }
+
+
+### F2. 먹이 주기 → 레벨업 (1번 누름)
+# 기대: level 2, feed_in_level 0, feed_needed 3, food 5, leveled_up true
+# @name feed2
+POST {{url}}/rest/v1/rpc/feed_pet
+apikey: {{key}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "p_request_id": "{{$guid}}" }
+
+
+### F3. F2 재전송 (같은 요청 ID)
+# 기대: F2와 완전히 같은 응답, food 5 그대로 (먹이가 또 줄지 않음)
+POST {{url}}/rest/v1/rpc/feed_pet
+apikey: {{key}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "p_request_id": "{{feed2.request.body.$.p_request_id}}" }
+
+
+### F4. 먹이 주기 → 이 요청을 5번 누른다
+# 기대: 3번째에 level 3, stage "baby", evolved true (진화!), food 2
+#       5번째에 food 0, feed_in_level 2
+POST {{url}}/rest/v1/rpc/feed_pet
+apikey: {{key}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "p_request_id": "{{$guid}}" }
+
+
+### F5. 먹이 0개에서 먹이 주기
+# 기대: 400, NOT_ENOUGH_FOOD
+POST {{url}}/rest/v1/rpc/feed_pet
+apikey: {{key}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "p_request_id": "{{$guid}}" }
