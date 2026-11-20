@@ -13,7 +13,8 @@ backend/
 │       ├── 20261118000000_init_skeleton.sql   # 사용자, 펫, 수집 기록, 랭킹 뼈대
 │       ├── 20261119000000_error_keys.sql      # 실패 사유 오류 키, 함수 설명
 │       ├── 20261120000000_rewards.sql         # 설정표, 수집 현황, 보상 이력·자동 지급
-│       └── 20261121000000_feed_pet.sql        # 먹이 주기·레벨업·진화
+│       ├── 20261121000000_feed_pet.sql        # 먹이 주기·레벨업·진화
+│       └── 20261122000000_feedback_and_my_rank.sql  # 피드백·보상, KST 하루 경계, 내 순위
 └── tests/
     ├── api.http        # REST Client용 API 테스트 (정상 흐름 + 보안·예외)
     └── .env.example    # .env 로 복사해 URL·키 입력 (.env 는 커밋 안 함)
@@ -65,6 +66,9 @@ backend/
 | `reward_history` | FR-05-05 | 보상 지급 이력. 같은 기록·사유로 두 번 지급 불가 |
 | `get_my_collection_stats()` | FR-05-06 | 내 수집 현황, 다음 보상까지 남은 횟수 |
 | `feed_pet()`, `feed_requests` | FR-05-09 | 먹이 주기·레벨업·진화. 같은 요청 ID 재전송은 한 번만 반영 |
+| `submit_feedback()`, `feedbacks` | FR-05-07, 08 | 피드백 저장·보상. 기록당 1번, 10분 이내, 하루(KST) 3번. `is_discomfort`는 집계용 자동 계산 |
+| `feedback_discomfort_options` | FB-2 | 불편 사항 선택지. 바뀌면 이 표만 수정 |
+| `get_my_rank()` | FR-05-11 | 내 순위 (50위 밖 포함) |
 
 마이그레이션은 **파일 이름 순서대로 한 번씩만** 실행한다. 이미 실행한 파일은 고치지 않고, 변경은 새 파일로 만든다.
 

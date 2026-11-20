@@ -87,9 +87,9 @@ supabase.postgrest.rpc("함수이름", buildJsonObject { put("p_nickname", "우�
 | 400 | `INVALID_VALUE` | 측정값이 허용 범위를 벗어남 | 해당 기록은 버림 (재전송 금지) |
 | 400 | `MISSING_SERVER_ID` | 실제 모드인데 공용 서버 id 없음 | 공용 API 2 저장 성공 후 호출 |
 | 403 | `RECORD_OF_OTHER_USER` | 다른 사용자의 수집 기록 | 해당 기록은 버림 |
-| 400 | `FEEDBACK_EXPIRED` | 수집 후 10분 초과 (계획) | "제출 가능 시간이 지났어요" |
-| 409 | `FEEDBACK_DUPLICATE` | 이미 피드백한 수집 기록 (계획) | 창 닫기 |
-| 429 | `FEEDBACK_DAILY_LIMIT` | 오늘 3회 제출함 (계획) | "오늘은 더 제출할 수 없어요" |
+| 400 | `FEEDBACK_EXPIRED` | 수집 후 10분 초과 | "제출 가능 시간이 지났어요" |
+| 409 | `FEEDBACK_DUPLICATE` | 이미 피드백한 수집 기록 | 창 닫기 |
+| 429 | `FEEDBACK_DAILY_LIMIT` | 오늘 3회 제출함 | "오늘은 더 제출할 수 없어요" |
 | 400 | `NOT_ENOUGH_FOOD` | 보유 먹이 부족 | 버튼 비활성화 |
 | 409 | `REQUEST_ID_REUSED` | 다른 사용자가 이미 쓴 요청 ID | 새 UUID로 다시 요청 |
 | 403 | `GACHA_LOCKED` | 성체가 아니라 뽑기 불가 (계획) | 뽑기 메뉴 숨김 |
@@ -108,9 +108,9 @@ supabase.postgrest.rpc("함수이름", buildJsonObject { put("p_nickname", "우�
 | `get_my_profile` | ✅ 확정 | FR-05-03 | 내 정보 |
 | `add_collection_record` | ✅ 확정 | FR-05-04, 05 | 수집 기록 저장 + 수집 보상 |
 | `get_ranking` | ✅ 확정 | FR-05-11 | 상위 랭킹 |
-| `get_my_rank` | 🔲 계획 | FR-05-11 | 내 순위 |
+| `get_my_rank` | ✅ 확정 | FR-05-11 | 내 순위 |
 | `get_my_collection_stats` | ✅ 확정 | FR-05-06 | 수집 횟수·첫 수집 센서 |
-| `submit_feedback` | 🔲 계획 | FR-05-07 | 피드백 저장 + 보상 |
+| `submit_feedback` | ✅ 확정 | FR-05-07, 08 | 피드백 저장 + 보상 |
 | `feed_pet` | ✅ 확정 | FR-05-09 | 먹이 주기·레벨업·진화 |
 | `draw_costume` | 🔲 계획 | FR-05-10 | 코스튬 뽑기 |
 | `get_my_costumes` | 🔲 계획 | FR-05-10 | 보관함 |
@@ -192,8 +192,9 @@ supabase.postgrest.rpc("함수이름", buildJsonObject { put("p_nickname", "우�
 ```
 - 동률 기준은 미정. 임시로 `현재 레벨에서 먹인 수 ↓, 가입 순 ↑`
 
-### 5.6 `get_my_rank` 🔲
-파라미터 없음. **반환**: `{ "rank": 57, "nickname": "…", "level": 3, "stage": "baby" }` (RK-2, 50위 밖이어도 반환)
+### 5.6 `get_my_rank` ✅
+파라미터 없음. **반환**: `{ "rank": 57, "nickname": "…", "level": 3, "stage": "baby", "total": 120 }` (RK-2, 50위 밖이어도 반환)
+- 정렬 기준은 `get_ranking`과 같다. **실패**: `NOT_REGISTERED`
 
 ### 5.7 `get_my_collection_stats` ✅
 파라미터 없음. 다음 보상까지 남은 횟수 표시용. 실제 모드 기록만 센다.
@@ -207,19 +208,24 @@ supabase.postgrest.rpc("함수이름", buildJsonObject { put("p_nickname", "우�
 }
 ```
 
-### 5.8 `submit_feedback` 🔲
+### 5.8 `submit_feedback` ✅
 | 파라미터 | 타입 | 필수 | 설명 |
 |---|---|---|---|
-| `p_collection_record_id` | bigint | ✅ | `add_collection_record`가 돌려준 `id` |
-| `p_temp_feel` | text | | `cold` · `ok` · `hot` |
-| `p_humidity_feel` | text | | `dry` · `ok` · `humid` |
-| `p_discomforts` | text[] | | 불편 사항 코드 목록 (선택지 미정, C-10) |
-| `p_memo` | text | | 최대 길이 미정 (C-10) |
+| `p_collection_record_id` | bigint | ✅ | `add_collection_record`가 돌려준 `record.id` |
+| `p_temp_feel` | text | | `cold`(춥다) · `ok`(적당하다) · `hot`(덥다) |
+| `p_humidity_feel` | text | | `dry`(건조하다) · `ok`(적당하다) · `humid`(습하다) |
+| `p_discomforts` | text[] | | 불편 사항 코드 목록. 예: `["no_shade", "no_seat"]` |
+| `p_memo` | text | | 최대 100자 (설정값) |
 
-- 조건: 본인의 실제 모드 기록 · 수집 후 10분 이내 · 그 기록에 첫 피드백 · 오늘(KST) 3회 미만
-- **반환**: `{ "feedback_id": 12, "rewards": [{ "food": 5, "reason": "feedback" }], "food": 7 }`
-- **실패**: `RECORD_OF_OTHER_USER`, `FEEDBACK_EXPIRED`, `FEEDBACK_DUPLICATE`, `FEEDBACK_DAILY_LIMIT`
+- 체감 온도·체감 습도·불편 사항 중 **1개 이상** 보내야 한다.
+- **불편 사항 선택지**는 앱에 하드코딩하지 말고 표에서 읽는다:
+  `GET {URL}/rest/v1/feedback_discomfort_options?select=code,label&order=sort_order`
+  (현재: `no_shade` 그늘 없음 · `strong_wind` 바람 강함 · `smell` 냄새 · `no_seat` 앉을 곳 없음 · `other` 기타. 팀 결정 전 초안, C-10)
+- 조건: 본인의 실제 모드 기록 · 수집 후 10분 이내 · 그 기록에 첫 피드백 · 오늘(**KST 0시 기준**) 3회 미만
+- **반환**: `{ "feedback_id": 12, "rewards": [{ "food": 5, "reason": "feedback" }], "food": 7, "remaining_today": 2 }`
+- **실패**: `NOT_REGISTERED`, `INVALID_VALUE`, `RECORD_OF_OTHER_USER`, `FEEDBACK_DUPLICATE`, `FEEDBACK_EXPIRED`, `FEEDBACK_DAILY_LIMIT`
 - 피드백 창을 닫아도(FB-2-2) 아무것도 호출하지 않으면 된다.
+- 보상 개수, 하루 한도, 제출 가능 시간, 메모 길이는 DB `settings` 표의 값을 따른다.
 
 ### 5.9 `feed_pet` ✅
 | 파라미터 | 타입 | 설명 |
@@ -283,3 +289,4 @@ supabase.postgrest.rpc("함수이름", buildJsonObject { put("p_nickname", "우�
 | 2026-11-18 | 확정 함수 5개에 오류 키 적용 (`NICKNAME_INVALID`, `NICKNAME_TAKEN`, `ALREADY_REGISTERED`, `NOT_REGISTERED`, `INVALID_VALUE`, `MISSING_SERVER_ID`, `RECORD_OF_OTHER_USER`) |
 | 2026-11-20 | 수집 보상 구현. `add_collection_record` 응답을 `{record, rewards, food}`로 변경, `get_my_collection_stats` 추가 |
 | 2026-11-21 | `feed_pet` 구현 (레벨업·진화, 요청 ID 재전송 처리). 응답에 `feed_needed` 추가, 오류 키 `REQUEST_ID_REUSED` 추가 |
+| 2026-11-22 | `submit_feedback` 구현 (KST 0시 하루 경계, 불편 사항 선택지 표), `get_my_rank` 구현 (`total` 추가) |
