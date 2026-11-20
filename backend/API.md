@@ -17,43 +17,57 @@
 
 - 두 값은 공개돼도 되지만 `local.properties` 등 **커밋하지 않는 파일**에 둔다.
 - Secret key와 DB 비밀번호는 앱에 넣지 않는다.
-- 라이브러리: [`supabase-kt`](https://github.com/supabase-community/supabase-kt)의 `Auth`, `Postgrest` 모듈
-
-```kotlin
-val supabase = createSupabaseClient(supabaseUrl = URL, supabaseKey = KEY) {
-    install(Auth)
-    install(Postgrest)
-}
-```
+- 앱은 **Java**. 일반 HTTP 라이브러리(Retrofit + OkHttp 등)로 호출한다. 예시는 [부록 A](#부록-a-java-예시-retrofit).
 
 ---
 
-## 2. 앱 시작 흐름 (FR-05-01 ~ 03)
+## 2. 앱 시작 흐름과 토큰 관리 (FR-05-01 ~ 03)
 
-로그인 화면은 없다. 앱이 뒤에서 익명 세션을 만들고, 세션은 기기에 자동 저장된다.
+로그인 화면은 없다. 앱이 뒤에서 익명 세션을 만들고, **토큰을 기기에 직접 저장·갱신한다.**
 
+### 받는 값 (익명 로그인·갱신 응답)
+| 필드 | 설명 | 저장 |
+|---|---|---|
+| `access_token` | 모든 API 요청의 `Authorization: Bearer …`에 넣는 값. **1시간 뒤 만료** | SharedPreferences |
+| `refresh_token` | 새 `access_token`을 받는 값. **한 번 쓰면 새 값으로 바뀐다** | SharedPreferences |
+| `expires_at` | `access_token` 만료 시각 (Unix 초) | SharedPreferences |
+| `user.id` | 사용자 UUID. 공용 API 2의 `sender`에 넣는다 | SharedPreferences |
+
+### 흐름
 ```
 앱 실행
- ├─ supabase.auth.awaitInitialization()
- ├─ 세션 없음 → supabase.auth.signInAnonymously()
- └─ get_my_profile()
-      ├─ []      → 닉네임 화면 → is_nickname_available() → register_user()
+ ├─ 저장된 refresh_token 없음 (첫 실행)
+ │    └─ POST /auth/v1/signup  {}                         → 4개 값 저장
+ ├─ 저장된 refresh_token 있음
+ │    └─ POST /auth/v1/token?grant_type=refresh_token
+ │         { "refresh_token": "…" }                       → 4개 값 새로 저장
+ └─ rpc/get_my_profile
+      ├─ []      → 닉네임 화면 → is_nickname_available → register_user
       └─ [1개]   → 펫 화면
+
+API 호출 중 401 이 오면
+ └─ 토큰 갱신(위 refresh) 후 같은 요청을 1번 재시도
 ```
 
-- **사용자 UUID** = `supabase.auth.currentUserOrNull()?.id`. 공용 API 2의 `sender`에 이 값을 넣는다.
-- 앱을 삭제하거나 기기를 바꾸면 새 사용자가 된다 (현재 버전의 한계).
+- ⚠️ **401이 와도 `/auth/v1/signup`을 다시 부르지 않는다.** 새 계정이 만들어져 기존 펫에 접근할 수 없게 된다.
+- 갱신 응답의 `refresh_token`은 **매번 새 값으로 덮어쓴다.** 예전 값은 다시 쓸 수 없다.
+- 앱을 삭제하거나 기기를 바꾸면 저장된 토큰이 사라져 새 사용자가 된다 (현재 버전의 한계).
 
 ---
 
 ## 3. 공통 규칙
 
 ### 호출 방식
-모든 함수는 `POST {URL}/rest/v1/rpc/{함수이름}`, 본문은 JSON. `supabase-kt`에서는:
+모든 함수는 `POST {URL}/rest/v1/rpc/{함수이름}`, 본문은 JSON, 헤더는 아래 3개.
 
-```kotlin
-supabase.postgrest.rpc("함수이름", buildJsonObject { put("p_nickname", "우왕이") })
 ```
+apikey: {Publishable key}
+Authorization: Bearer {access_token}
+Content-Type: application/json
+```
+
+- 익명 로그인·토큰 갱신(`/auth/v1/...`)은 `apikey`만 넣고 `Authorization`은 넣지 않는다.
+- 네트워크 호출은 메인 스레드에서 하지 않는다 (Retrofit `enqueue` 사용).
 
 - 파라미터 이름은 모두 `p_` 로 시작한다.
 - 시각은 ISO 8601 UTC 문자열로 주고받는다 (`2026-11-18T12:58:25Z`). 화면 표시는 앱에서 KST로 변환한다.
@@ -79,7 +93,7 @@ supabase.postgrest.rpc("함수이름", buildJsonObject { put("p_nickname", "우�
 
 | HTTP | 오류 키 (`message`) | 의미 | 앱 처리 (제안) |
 |---|---|---|---|
-| 401 | (키 없음) | 세션 없음·만료 | `signInAnonymously()` 후 재시도 |
+| 401 | (키 없음) | 토큰 없음·만료 | 토큰 갱신 후 1번 재시도 (2장). **signup 다시 부르지 않기** |
 | 400 | `NICKNAME_INVALID` | 닉네임이 2~10자가 아님 | "닉네임은 2~10자로 입력해 주세요" |
 | 409 | `NICKNAME_TAKEN` | 다른 사용자가 사용 중 | "이미 사용 중인 닉네임" (US-1-1) |
 | 409 | `ALREADY_REGISTERED` | 이미 닉네임을 등록한 사용자 | `get_my_profile()` 후 펫 화면으로 |
@@ -281,6 +295,99 @@ supabase.postgrest.rpc("함수이름", buildJsonObject { put("p_nickname", "우�
 
 [`tests/api.http`](tests/api.http)에 실제 요청·응답 예시가 있다 (VS Code REST Client).
 
+## 부록 A. Java 예시 (Retrofit)
+
+> 구조를 보여주는 예시이며 백엔드 쪽에서 빌드해 보지는 않았다. 패키지·클래스 이름은 앱에 맞게 바꾼다.
+
+**의존성** (`app/build.gradle`)
+```gradle
+implementation 'com.squareup.retrofit2:retrofit:2.11.0'
+implementation 'com.squareup.retrofit2:converter-gson:2.11.0'
+implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+```
+URL·키는 `local.properties`에 두고 `BuildConfig.SUPABASE_URL`, `BuildConfig.SUPABASE_KEY`로 읽는다.
+
+**API 인터페이스**
+```java
+public interface SupabaseApi {
+    @POST("auth/v1/signup")
+    Call<JsonObject> signUpAnonymously(@Body JsonObject empty);           // new JsonObject()
+
+    @POST("auth/v1/token?grant_type=refresh_token")
+    Call<JsonObject> refreshToken(@Body JsonObject body);                 // {"refresh_token": "…"}
+
+    @POST("rest/v1/rpc/{function}")
+    Call<JsonElement> rpc(@Path("function") String function, @Body JsonObject params);
+}
+```
+
+**클라이언트: 헤더 자동 추가 + 401이면 토큰 갱신 후 재시도**
+```java
+OkHttpClient http = new OkHttpClient.Builder()
+    .addInterceptor(chain -> {
+        Request req = chain.request();
+        Request.Builder b = req.newBuilder().header("apikey", BuildConfig.SUPABASE_KEY);
+        String token = tokenStore.getAccessToken();
+        if (token != null && !req.url().encodedPath().startsWith("/auth/")) {
+            b.header("Authorization", "Bearer " + token);
+        }
+        return chain.proceed(b.build());
+    })
+    .authenticator((route, response) -> {
+        if (response.priorResponse() != null) return null;   // 이미 한 번 재시도함
+        String newToken = tokenStore.refreshBlocking();        // refresh 호출 후 4개 값 저장, 실패 시 null
+        if (newToken == null) return null;
+        return response.request().newBuilder()
+            .header("Authorization", "Bearer " + newToken).build();
+    })
+    .build();
+
+SupabaseApi api = new Retrofit.Builder()
+    .baseUrl(BuildConfig.SUPABASE_URL + "/")
+    .client(http)
+    .addConverterFactory(GsonConverterFactory.create())
+    .build()
+    .create(SupabaseApi.class);
+```
+
+**함수 호출과 오류 키 읽기**
+```java
+JsonObject params = new JsonObject();
+params.addProperty("p_nickname", nickname);
+
+api.rpc("register_user", params).enqueue(new Callback<JsonElement>() {
+    @Override
+    public void onResponse(Call<JsonElement> call, Response<JsonElement> res) {
+        if (res.isSuccessful()) {
+            JsonObject pet = res.body().getAsJsonObject();      // level, stage, food …
+        } else {
+            String key = errorKey(res);                         // "NICKNAME_TAKEN" 등 (4장 표)
+        }
+    }
+    @Override
+    public void onFailure(Call<JsonElement> call, Throwable t) {
+        // 네트워크 오류: 같은 값으로 재시도해도 안전한 함수인지 3장 확인
+    }
+});
+
+static String errorKey(Response<?> res) {
+    try {
+        return JsonParser.parseString(res.errorBody().string())
+                .getAsJsonObject().get("message").getAsString();
+    } catch (Exception e) {
+        return null;
+    }
+}
+```
+
+**먹이 주기: 요청 ID는 재시도할 때 같은 값을 쓴다**
+```java
+String requestId = UUID.randomUUID().toString();   // 버튼을 누를 때 1번 생성
+JsonObject p = new JsonObject();
+p.addProperty("p_request_id", requestId);
+api.rpc("feed_pet", p).enqueue(callback);          // 실패해 재시도할 때도 같은 requestId
+```
+
 ## 변경 이력
 
 | 날짜 | 내용 |
@@ -290,3 +397,4 @@ supabase.postgrest.rpc("함수이름", buildJsonObject { put("p_nickname", "우�
 | 2026-11-20 | 수집 보상 구현. `add_collection_record` 응답을 `{record, rewards, food}`로 변경, `get_my_collection_stats` 추가 |
 | 2026-11-21 | `feed_pet` 구현 (레벨업·진화, 요청 ID 재전송 처리). 응답에 `feed_needed` 추가, 오류 키 `REQUEST_ID_REUSED` 추가 |
 | 2026-11-22 | `submit_feedback` 구현 (KST 0시 하루 경계, 불편 사항 선택지 표), `get_my_rank` 구현 (`total` 추가) |
+| 2026-11-22 | 앱이 Java로 확정 → Kotlin 예시 삭제, 토큰 저장·갱신 흐름(2장)과 Java 예시(부록 A) 추가. 401 처리를 "signup 재호출"에서 "토큰 갱신 후 재시도"로 수정 |
