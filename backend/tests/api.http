@@ -78,7 +78,7 @@ Content-Type: application/json
 
 
 ### 6. 수집 기록 저장 - 테스트 모드 (DC-6, DC-7)
-# 기대: 200, 새 id 와 is_test = true
+# 기대: 200, record 에 새 id 와 is_test = true, rewards [] (테스트 모드는 보상 없음)
 # @name collect
 POST {{url}}/rest/v1/rpc/add_collection_record
 apikey: {{key}}
@@ -101,7 +101,7 @@ Content-Type: application/json
 
 
 ### 7. 같은 수집 기록 재전송 (중복 저장 방지)
-# 기대: 200, 6번과 같은 id (새 기록이 생기지 않음)
+# 기대: 200, record.id 가 6번과 같음 (새 기록이 생기지 않음)
 POST {{url}}/rest/v1/rpc/add_collection_record
 apikey: {{key}}
 Authorization: Bearer {{token}}
@@ -115,8 +115,8 @@ Content-Type: application/json
   "p_tvoc": 100,
   "p_co2": 650,
   "p_rssi": -70,
-  "p_measured_at": "{{collect.response.body.$.measured_at}}",
-  "p_public_server_id": "{{collect.response.body.$.public_server_id}}",
+  "p_measured_at": "{{collect.response.body.$.record.measured_at}}",
+  "p_public_server_id": "{{collect.response.body.$.record.public_server_id}}",
   "p_is_shadow_area": false,
   "p_is_test": true
 }
@@ -257,8 +257,8 @@ Content-Type: application/json
   "p_tvoc": 100,
   "p_co2": 650,
   "p_rssi": -70,
-  "p_measured_at": "{{collect.response.body.$.measured_at}}",
-  "p_public_server_id": "{{collect.response.body.$.public_server_id}}",
+  "p_measured_at": "{{collect.response.body.$.record.measured_at}}",
+  "p_public_server_id": "{{collect.response.body.$.record.public_server_id}}",
   "p_is_shadow_area": false,
   "p_is_test": true
 }
@@ -306,3 +306,96 @@ Content-Type: application/json
   "p_is_shadow_area": false,
   "p_is_test": false
 }
+
+
+### ---------------------------------------------------------------------
+### [보상] 1번 사용자(token)로 진행. 실제 모드 기록을 가짜 id(test-…)로 만든다.
+###   ※ 운영 데이터와 섞이므로 테스트 사용자는 나중에 지운다.
+### ---------------------------------------------------------------------
+
+### R1. 첫 실제 수집 (sensor 15)
+# 기대: rewards = [{ food 2, reason "first_collection" }], food 2
+# @name rcollect
+POST {{url}}/rest/v1/rpc/add_collection_record
+apikey: {{key}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "p_sensor_name": "sensor 15", "p_temperature": 20.0, "p_humidity": 50.0,
+  "p_aqi": null, "p_tvoc": null, "p_co2": null, "p_rssi": -70,
+  "p_measured_at": "{{$datetime iso8601}}",
+  "p_public_server_id": "test-{{$guid}}",
+  "p_is_shadow_area": false, "p_is_test": false
+}
+
+
+### R2. R1 재전송
+# 기대: record.id 가 R1과 같고 rewards [] (두 번 지급되지 않음)
+POST {{url}}/rest/v1/rpc/add_collection_record
+apikey: {{key}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "p_sensor_name": "sensor 15", "p_temperature": 20.0, "p_humidity": 50.0,
+  "p_aqi": null, "p_tvoc": null, "p_co2": null, "p_rssi": -70,
+  "p_measured_at": "{{rcollect.response.body.$.record.measured_at}}",
+  "p_public_server_id": "{{rcollect.response.body.$.record.public_server_id}}",
+  "p_is_shadow_area": false, "p_is_test": false
+}
+
+
+### R3. 같은 센서 일반 수집 → 이 요청을 4번 누른다
+# 기대: 1~3번째 rewards [] (같은 센서라 첫 수집 아님)
+#       4번째(누적 5회) rewards = [{ food 1, reason "collection" }]
+POST {{url}}/rest/v1/rpc/add_collection_record
+apikey: {{key}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "p_sensor_name": "sensor 15", "p_temperature": 20.0, "p_humidity": 50.0,
+  "p_aqi": null, "p_tvoc": null, "p_co2": null, "p_rssi": -70,
+  "p_measured_at": "{{$datetime iso8601}}",
+  "p_public_server_id": "test-{{$guid}}",
+  "p_is_shadow_area": false, "p_is_test": false
+}
+
+
+### R4. 음영지역 수집 (sensor 31) → 이 요청을 5번 누른다
+# 기대: 1번째 rewards = [{ food 2, "first_collection" }]
+#       5번째 rewards = [{ food 2, "shadow_collection" }]
+#       일반 수집 횟수는 늘지 않음
+POST {{url}}/rest/v1/rpc/add_collection_record
+apikey: {{key}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "p_sensor_name": "sensor 31", "p_temperature": 20.0, "p_humidity": 50.0,
+  "p_aqi": null, "p_tvoc": null, "p_co2": null, "p_rssi": -70,
+  "p_measured_at": "{{$datetime iso8601}}",
+  "p_public_server_id": "test-{{$guid}}",
+  "p_is_shadow_area": true, "p_is_test": false
+}
+
+
+### R5. 내 수집 현황 (FR-05-06)
+# 기대: collection_count 5, shadow_collection_count 5,
+#       next_collection_reward_in 5, next_shadow_reward_in 5,
+#       first_sensors ["sensor 15", "sensor 31"]
+POST {{url}}/rest/v1/rpc/get_my_collection_stats
+apikey: {{key}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{}
+
+
+### R6. 내 보상 이력
+# 기대: 4건 (first_collection 2, collection 1, first_collection 2, shadow_collection 2)
+#       → 5번 get_my_profile 의 food 는 7
+GET {{url}}/rest/v1/reward_history?select=reason,food,collection_record_id,created_at&order=id
+apikey: {{key}}
+Authorization: Bearer {{token}}

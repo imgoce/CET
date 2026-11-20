@@ -105,10 +105,10 @@ supabase.postgrest.rpc("함수이름", buildJsonObject { put("p_nickname", "우�
 | `is_nickname_available` | ✅ 확정 | FR-05-02 | 닉네임 중복 확인 |
 | `register_user` | ✅ 확정 | FR-05-02, 03 | 닉네임 등록 + 펫 생성 |
 | `get_my_profile` | ✅ 확정 | FR-05-03 | 내 정보 |
-| `add_collection_record` | ✅ 확정 (응답 변경 예정) | FR-05-04, 05 | 수집 기록 저장 + 수집 보상 |
+| `add_collection_record` | ✅ 확정 | FR-05-04, 05 | 수집 기록 저장 + 수집 보상 |
 | `get_ranking` | ✅ 확정 | FR-05-11 | 상위 랭킹 |
 | `get_my_rank` | 🔲 계획 | FR-05-11 | 내 순위 |
-| `get_my_collection_stats` | 🔲 계획 | FR-05-06 | 수집 횟수·첫 수집 센서 |
+| `get_my_collection_stats` | ✅ 확정 | FR-05-06 | 수집 횟수·첫 수집 센서 |
 | `submit_feedback` | 🔲 계획 | FR-05-07 | 피드백 저장 + 보상 |
 | `feed_pet` | 🔲 계획 | FR-05-09 | 먹이 주기·레벨업·진화 |
 | `draw_costume` | 🔲 계획 | FR-05-10 | 코스튬 뽑기 |
@@ -145,7 +145,7 @@ supabase.postgrest.rpc("함수이름", buildJsonObject { put("p_nickname", "우�
 - `stage`: `egg`(알) · `baby`(새끼) · `hatchling`(해츨링) · `adult`(성체)
 - `feed_in_level`: 현재 레벨에서 먹인 먹이 수. 다음 레벨까지 필요한 수는 `level + 1` (게이지 표시용, GR-2-1)
 
-### 5.4 `add_collection_record` ✅ (응답 변경 예정)
+### 5.4 `add_collection_record` ✅
 **공용 API 2 저장에 성공한 뒤** 호출한다. 테스트 모드면 공용 서버로 보내지 않고 바로 호출한다.
 
 | 파라미터 | 타입 | 필수 | 설명 |
@@ -164,12 +164,7 @@ supabase.postgrest.rpc("함수이름", buildJsonObject { put("p_nickname", "우�
 
 > 오픈소스 센서의 온도·습도가 **둘 다 0**이면 `null`로 보낸다. 0을 보내면 정상값으로 저장된다.
 
-**반환 (현재)**: 저장된 기록. 재전송이면 기존 기록 (같은 `id`)
-```json
-{ "id": 1, "sensor_name": "sensor 07", "temperature": 21.50, "humidity": 55.00, "public_server_id": "…", "is_test": false, … }
-```
-
-**반환 (계획)**: 보상 결과를 함께 돌려준다. 앱은 `rewards`가 비어 있지 않으면 보상 알림(RW-7)을 띄운다.
+**반환**: 저장된 기록, 이번에 지급된 보상, 지급 후 보유 먹이. 앱은 `rewards`가 비어 있지 않으면 보상 알림(RW-7)을 띄운다.
 ```json
 {
   "record": { "id": 1, … },
@@ -178,8 +173,10 @@ supabase.postgrest.rpc("함수이름", buildJsonObject { put("p_nickname", "우�
 }
 ```
 - `reason`: `first_collection`(센서별 첫 수집) · `collection`(일반 5회) · `shadow_collection`(음영지역 5회)
-- 재전송이면 `rewards`는 `[]` (이미 지급됨)
+- 재전송이면 `record`는 기존 기록(같은 `id`), `rewards`는 `[]` (이미 지급됨)
 - 테스트 모드 기록은 보상 없음
+- 한 번에 보상이 2개 올 수 있다 (예: 새 센서 첫 수집이 마침 5회째)
+- 보상 개수·주기는 DB `settings` 표의 값을 따른다 (현재: 첫 수집 2개, 일반 5회마다 1개, 음영지역 5회마다 2개)
 
 **실패**: `NOT_REGISTERED`, `INVALID_VALUE`, `MISSING_SERVER_ID`, `RECORD_OF_OTHER_USER`
 
@@ -197,10 +194,16 @@ supabase.postgrest.rpc("함수이름", buildJsonObject { put("p_nickname", "우�
 ### 5.6 `get_my_rank` 🔲
 파라미터 없음. **반환**: `{ "rank": 57, "nickname": "…", "level": 3, "stage": "baby" }` (RK-2, 50위 밖이어도 반환)
 
-### 5.7 `get_my_collection_stats` 🔲
-파라미터 없음. 다음 보상까지 남은 횟수 표시용.
+### 5.7 `get_my_collection_stats` ✅
+파라미터 없음. 다음 보상까지 남은 횟수 표시용. 실제 모드 기록만 센다.
 ```json
-{ "collection_count": 13, "shadow_collection_count": 4, "first_sensors": ["sensor 07", "sensor 15"] }
+{
+  "collection_count": 5,
+  "shadow_collection_count": 5,
+  "next_collection_reward_in": 5,
+  "next_shadow_reward_in": 5,
+  "first_sensors": ["sensor 15", "sensor 31"]
+}
 ```
 
 ### 5.8 `submit_feedback` 🔲
@@ -274,3 +277,4 @@ supabase.postgrest.rpc("함수이름", buildJsonObject { put("p_nickname", "우�
 |---|---|
 | 2026-11-18 | v0.1 최초 작성. 확정 5개, 계획 7개 |
 | 2026-11-18 | 확정 함수 5개에 오류 키 적용 (`NICKNAME_INVALID`, `NICKNAME_TAKEN`, `ALREADY_REGISTERED`, `NOT_REGISTERED`, `INVALID_VALUE`, `MISSING_SERVER_ID`, `RECORD_OF_OTHER_USER`) |
+| 2026-11-20 | 수집 보상 구현. `add_collection_record` 응답을 `{record, rewards, food}`로 변경, `get_my_collection_stats` 추가 |

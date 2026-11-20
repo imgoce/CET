@@ -10,7 +10,9 @@ Supabase(PostgreSQL) 기반. 앱은 공용 서버(API 1·2·5)와 이 DB를 함�
 backend/
 ├── supabase/
 │   └── migrations/
-│       └── 20261118000000_init_skeleton.sql   # 사용자, 펫, 수집 기록, 랭킹 뼈대
+│       ├── 20261118000000_init_skeleton.sql   # 사용자, 펫, 수집 기록, 랭킹 뼈대
+│       ├── 20261119000000_error_keys.sql      # 실패 사유 오류 키, 함수 설명
+│       └── 20261120000000_rewards.sql         # 설정표, 수집 현황, 보상 이력·자동 지급
 └── tests/
     ├── api.http        # REST Client용 API 테스트 (정상 흐름 + 보안·예외)
     └── .env.example    # .env 로 복사해 URL·키 입력 (.env 는 커밋 안 함)
@@ -57,6 +59,12 @@ backend/
 | `get_my_profile()` | US-2-1, US-2-2 | 내 사용자·펫 정보 |
 | `add_collection_record()` | DC-6 | 수집 기록 저장 (재전송 안전) |
 | `get_ranking()` | RK-1 | 상위 N명의 닉네임·레벨·진화 단계 (UUID 비공개) |
+| `settings` | - | 보상 개수·주기 등 바뀔 수 있는 숫자. Table Editor에서 value만 고치면 됨 |
+| `collection_stats`, `first_collections` | FR-05-06 | 일반·음영지역 수집 횟수, 처음 수집한 센서 |
+| `reward_history` | FR-05-05 | 보상 지급 이력. 같은 기록·사유로 두 번 지급 불가 |
+| `get_my_collection_stats()` | FR-05-06 | 내 수집 현황, 다음 보상까지 남은 횟수 |
+
+마이그레이션은 **파일 이름 순서대로 한 번씩만** 실행한다. 이미 실행한 파일은 고치지 않고, 변경은 새 파일로 만든다.
 
 ## 접근 원칙
 
