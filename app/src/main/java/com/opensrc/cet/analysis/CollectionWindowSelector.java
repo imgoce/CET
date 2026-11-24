@@ -29,7 +29,9 @@ public final class CollectionWindowSelector<T> {
 
     /**
      * Selects from validated measurements. The caller supplies the session-aligned window start
-     * and identifies measurements already handled for the current user by sensor and timestamp.
+     * and identifies measurements already handled for the current user by sensor and measuredAt.
+     * A globally stored sample can still be new to this user. Keep the returned candidate
+     * together with the window ID when dispatching or retrying the selected measurements.
      * An incomplete window is absent. A completed window can have no eligible measurements.
      */
     public Optional<Selection<T>> select(Instant windowStartAt, Instant closedAt,

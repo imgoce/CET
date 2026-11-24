@@ -75,6 +75,28 @@ public class BleCollectionTest {
     }
 
     @Test
+    public void acceptsExactlyThirteenByteCoursePacket() {
+        byte[] packet = Arrays.copyOf(course(-250, 3000, 715), 13);
+        Reading reading = parse("opensrc1", packet, -85).get();
+        assertEquals(Double.valueOf(-2.5), reading.temp);
+        assertEquals(Double.valueOf(30), reading.humidity);
+        assertEquals(Integer.valueOf(715), reading.eco2);
+        assertEquals(START, reading.measuredAt);
+    }
+
+    @Test
+    public void selectsNextSensorWhenStrongerAdvertisementIsInvalid() {
+        Optional<Reading> invalid = parse("sensor 01", lab(399, 2900, START.getEpochSecond()), -40);
+        assertFalse(invalid.isPresent());
+        Reading valid = windowReading("sensor 02", 0, 1, -72);
+        CollectionWindowSelector.Selection<Reading> selection = selector.select(START,
+                START.plusSeconds(10), Collections.singletonList(valid),
+                (number, timestamp) -> false).get();
+        assertEquals(2, selection.candidateSensorNo().getAsInt());
+        assertEquals(Collections.singletonList(valid), selection.measurements());
+    }
+
+    @Test
     public void rejectsMalformedAndOutOfRangeData() {
         byte[] valid = lab(700, 2900, 1);
         assertFalse(parse("sensor 01", valid, -86).isPresent());

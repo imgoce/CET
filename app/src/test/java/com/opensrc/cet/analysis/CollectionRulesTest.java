@@ -45,6 +45,7 @@ public class CollectionRulesTest {
             assertFalse(result.credited);
             assertFalse(result.quotaReached);
             assertEquals(4, result.normalRemainder);
+            assertEquals(4, result.shadowRemainder);
         }
     }
 
@@ -69,6 +70,43 @@ public class CollectionRulesTest {
         CollectionRules.Decision result = evaluate(8, 8, initial);
         assertFalse(result.credited);
         assertTrue(result.measurementAdded);
+    }
+
+    @Test
+    public void usesMeasurementTimeAndSensorForDedupAndWindowIdForCredit() {
+        Instant measuredAt = start.minusSeconds(30);
+        Instant collectedAt = start.plusSeconds(1);
+        history.global = true;
+        history.personal = true;
+
+        CollectionRules.Decision duplicate = CollectionRules.evaluate(8, measuredAt, collectedAt,
+                window, start, 8, history, initial, 0, 0);
+        assertFalse(duplicate.measurementAdded);
+        assertFalse(duplicate.credited);
+        assertEquals(8, history.globalSensor);
+        assertEquals(8, history.personalSensor);
+        assertEquals(measuredAt, history.globalTime);
+        assertEquals(measuredAt, history.personalTime);
+        assertEquals(window, history.checkedWindow);
+    }
+
+    @Test
+    public void carriesSeparateRemaindersIntoLaterWindows() {
+        CollectionRules.Decision shadow = CollectionRules.evaluate(1, start, start,
+                window, start, 1, history, initial, 0, 0);
+        assertTrue(shadow.credited);
+        assertFalse(shadow.quotaReached);
+        assertEquals(0, shadow.normalRemainder);
+        assertEquals(1, shadow.shadowRemainder);
+
+        Instant nextStart = start.plusSeconds(10);
+        CollectionRules.Decision normal = CollectionRules.evaluate(8, nextStart, nextStart,
+                UUID.randomUUID(), nextStart, 8, history, shadow.after,
+                shadow.normalRemainder, shadow.shadowRemainder);
+        assertTrue(normal.credited);
+        assertFalse(normal.quotaReached);
+        assertEquals(1, normal.normalRemainder);
+        assertEquals(1, normal.shadowRemainder);
     }
 
     @Test
@@ -104,10 +142,31 @@ public class CollectionRulesTest {
         boolean personal;
         boolean usedWindow;
         List<Instant> starts = Collections.emptyList();
+        int globalSensor;
+        int personalSensor;
+        Instant globalTime;
+        Instant personalTime;
+        UUID checkedWindow;
 
-        @Override public boolean measurementExists(int sensorNo, Instant measuredAt) { return global; }
-        @Override public boolean creditedMeasurement(int sensorNo, Instant measuredAt) { return personal; }
-        @Override public boolean creditedWindow(UUID windowId) { return usedWindow; }
+        @Override
+        public boolean measurementExists(int sensorNo, Instant measuredAt) {
+            globalSensor = sensorNo;
+            globalTime = measuredAt;
+            return global;
+        }
+
+        @Override
+        public boolean creditedMeasurement(int sensorNo, Instant measuredAt) {
+            personalSensor = sensorNo;
+            personalTime = measuredAt;
+            return personal;
+        }
+
+        @Override
+        public boolean creditedWindow(UUID windowId) {
+            checkedWindow = windowId;
+            return usedWindow;
+        }
         @Override public Iterable<Instant> nearbyCreditedWindowStarts(Instant start) { return starts; }
     }
 }
