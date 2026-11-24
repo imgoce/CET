@@ -12,7 +12,7 @@ import java.util.function.Function;
 import java.util.function.ToIntFunction;
 
 public final class CollectionWindowSelector<T> {
-    private static final int WINDOW_SECONDS = 10;
+    static final int WINDOW_SECONDS = 10;
 
     private final ToIntFunction<T> sensorNo;
     private final Function<T, Instant> measuredAt;
