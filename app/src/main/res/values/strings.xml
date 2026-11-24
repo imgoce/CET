@@ -1,3 +1,6 @@
 <resources>
     <string name="app_name">CET</string>
+    <string name="pet_hunger_channel">배고픔 알림</string>
+    <string name="pet_hunger_title">우왕이가 배고파요</string>
+    <string name="pet_hunger_message">먹이를 준 지 24시간이 지났어요.</string>
 </resources>
