@@ -6,7 +6,7 @@
 ###
 ### - 로그인 토큰 없이 Publishable key 만으로 호출한다 (계약서 §08, 닉네임 접속).
 ### - 실패 응답: { "code": "PTxxx", "message": "<오류 코드>", "details": "<설명>" }
-### - 테스트 사용자 정리: SQL Editor 에서  delete from public.users where nickname like 't%';
+### - 테스트 데이터 정리: backend/supabase/dev_reset.sql 을 SQL Editor 에서 실행
 ### =====================================================================
 
 @url = {{$dotenv SUPABASE_URL}}
@@ -188,6 +188,7 @@ Content-Type: application/json
 
 ### C4. 같은 구간 W1 의 다른 센서 15번 (후보가 아님)
 # 기대: credited false, grants [], measurementAdded true (환경 표본은 저장)
+# @name c4
 POST {{url}}/rest/v1/rpc/commit_collection
 apikey: {{key}}
 Content-Type: application/json
@@ -299,3 +300,114 @@ apikey: {{key}}
 Content-Type: application/json
 
 {}
+
+
+### ---------------------------------------------------------------------
+### [4단계] 피드백 submit_feedback (§09)
+###   U1 사용자로 이어서 한다. FB0 → FB1 은 10분 안에 진행한다.
+### ---------------------------------------------------------------------
+
+### FB0. 피드백할 새 수집 (지금 시각, 연구실 센서 20번, 기여 인정)
+# 기대: credited true
+# @name fcol
+POST {{url}}/rest/v1/rpc/commit_collection
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_input": {
+  "collectionId": "{{$guid}}", "userId": "{{userId}}", "windowId": "{{$guid}}",
+  "windowStartAt": "{{$datetime iso8601}}", "candidateSensorNo": 20,
+  "measurement": { "sensorNo": 20, "sensorMac": "B8:27:EB:00:00:20",
+    "measuredAt": "{{$datetime iso8601}}", "collectedAt": "{{$datetime iso8601}}", "rssiDbm": -60,
+    "temperatureC": 29.0, "humidityRh": null, "co2Ppm": 700, "eco2Ppm": null, "aqi": null, "tvocPpb": null },
+  "publicRoute": "UPLOADED", "publicId": 200 } }
+
+
+### FB1. 피드백 제출
+# 기대: 200, grants [FEEDBACK 5], todayCount 1 (오늘 첫 제출일 때), foodBalance +5, replayed false
+# @name fb1
+POST {{url}}/rest/v1/rpc/submit_feedback
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_input": {
+  "feedbackId": "{{$guid}}", "collectionId": "{{fcol.response.body.$.collectionId}}", "userId": "{{userId}}",
+  "feltTemp": "HOT", "feltHumidity": "OK", "issues": ["NO_SHADE"], "memo": "햇빛이 강해요" } }
+
+
+### FB2. FB1 재전송 (같은 feedbackId·내용)
+# 기대: FB1과 같은 결과 + replayed true. 먹이·횟수 그대로
+POST {{url}}/rest/v1/rpc/submit_feedback
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_input": {
+  "feedbackId": "{{fb1.request.body.$.p_input.feedbackId}}", "collectionId": "{{fcol.response.body.$.collectionId}}", "userId": "{{userId}}",
+  "feltTemp": "HOT", "feltHumidity": "OK", "issues": ["NO_SHADE"], "memo": "햇빛이 강해요" } }
+
+
+### FB3. 같은 feedbackId 에 다른 내용
+# 기대: 409, ID_CONFLICT
+POST {{url}}/rest/v1/rpc/submit_feedback
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_input": {
+  "feedbackId": "{{fb1.request.body.$.p_input.feedbackId}}", "collectionId": "{{fcol.response.body.$.collectionId}}", "userId": "{{userId}}",
+  "feltTemp": "OK", "feltHumidity": "OK", "issues": ["NONE"], "memo": null } }
+
+
+### FB4. 같은 수집에 새 피드백
+# 기대: 409, FEEDBACK_EXISTS
+POST {{url}}/rest/v1/rpc/submit_feedback
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_input": {
+  "feedbackId": "{{$guid}}", "collectionId": "{{fcol.response.body.$.collectionId}}", "userId": "{{userId}}",
+  "feltTemp": "OK", "feltHumidity": "OK", "issues": ["NONE"], "memo": null } }
+
+
+### FB5. NONE 과 다른 불편 사항을 함께 선택
+# 기대: 400, INVALID_INPUT
+POST {{url}}/rest/v1/rpc/submit_feedback
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_input": {
+  "feedbackId": "{{$guid}}", "collectionId": "{{fcol.response.body.$.collectionId}}", "userId": "{{userId}}",
+  "feltTemp": "OK", "feltHumidity": "OK", "issues": ["NONE", "NO_SHADE"], "memo": null } }
+
+
+### FB6. 메모 101자
+# 기대: 400, INVALID_INPUT
+POST {{url}}/rest/v1/rpc/submit_feedback
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_input": {
+  "feedbackId": "{{$guid}}", "collectionId": "{{fcol.response.body.$.collectionId}}", "userId": "{{userId}}",
+  "feltTemp": "OK", "feltHumidity": "OK", "issues": ["OTHER"],
+  "memo": "12345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901" } }
+
+
+### FB7. 기여가 인정되지 않은 수집 (3단계 C4: 후보가 아닌 센서)
+# 기대: 403, NOT_ELIGIBLE
+POST {{url}}/rest/v1/rpc/submit_feedback
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_input": {
+  "feedbackId": "{{$guid}}", "collectionId": "{{c4.response.body.$.collectionId}}", "userId": "{{userId}}",
+  "feltTemp": "OK", "feltHumidity": "OK", "issues": ["NONE"], "memo": null } }
+
+
+### FB8. 10분이 지난 수집 (3단계 C1: 고정 시각 2026-11-25 12:00 KST)
+# 기대: 400, FEEDBACK_EXPIRED
+POST {{url}}/rest/v1/rpc/submit_feedback
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_input": {
+  "feedbackId": "{{$guid}}", "collectionId": "{{c1.response.body.$.collectionId}}", "userId": "{{userId}}",
+  "feltTemp": "OK", "feltHumidity": "OK", "issues": ["NONE"], "memo": null } }

@@ -17,7 +17,7 @@ Supabase(PostgreSQL) 팀 DB. **기준 문서는 [`docs/api-contract.md`](../docs
 | `getUserState` | `get_user_state(p_user_id)` | ✅ |
 | `commitCollection` | `commit_collection(p_input, p_test)` — `p_input`은 계약서 §06 요청 JSON 그대로 | ✅ |
 | `getShadowSites` | `get_shadow_sites()` | ✅ |
-| `submitFeedback` | | 🔲 4단계 |
+| `submitFeedback` | `submit_feedback(p_input)` — `p_input`은 계약서 §09 요청 JSON 그대로 | ✅ |
 | `feedPet`, `drawCostume`, `equipCostume`, `getRanking` | | 🔲 5단계 |
 | `getSiteEnvironment`, `getAnalysisInputs` | | 🔲 6단계 |
 
@@ -33,7 +33,8 @@ backend/
 ├── supabase/migrations/   # DB 변경 기록. 파일 이름 순서대로 한 번씩만 실행
 │   ├── 20261118 ~ 20261122_*.sql            # (폐기) 익명 로그인 방식의 초기 구조
 │   ├── 20261125000000_contract_v12_users.sql        # 계약서 v1.2 재구성: 사용자·펫·닉네임 접속
-│   └── 20261125010000_contract_v12_collections.sql  # 수집 저장·음영지역·수집 보상
+│   ├── 20261125010000_contract_v12_collections.sql  # 수집 저장·음영지역·수집 보상
+│   └── 20261125020000_contract_v12_feedback.sql     # 현장 피드백·보상
 ├── supabase/dev_reset.sql   # ⚠️ 개발용: 운영 데이터 전체 초기화 (필요할 때만 수동 실행)
 └── tests/
     ├── api.http        # REST Client 테스트 (위에서부터 순서대로 Send Request)
