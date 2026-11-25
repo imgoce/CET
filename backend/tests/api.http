@@ -129,3 +129,173 @@ apikey: {{key}}
 Content-Type: application/json
 
 { "food_balance": 9999 }
+
+
+### ---------------------------------------------------------------------
+### [3단계] 수집 저장 commit_collection (§06·07·13)
+###   U1 에서 만든 사용자로 이어서 한다. 기준 시각 T = 2026-11-25T03:00:00Z (KST 12:00)
+###   음영 결과(isShadowBefore)는 dev_reset.sql 직후 처음 실행할 때 기준이다.
+### ---------------------------------------------------------------------
+
+### C1. 첫 기여: 구간 W1 [T, T+10s), 후보 7번 = 측정 7번
+# 기대: credited true, isShadowBefore false, grants [FIRST_SENSOR_DAY 2],
+#       foodBalance 2, normalRemainder 1, replayed false
+# @name c1
+POST {{url}}/rest/v1/rpc/commit_collection
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_input": {
+  "collectionId": "{{$guid}}", "userId": "{{userId}}", "windowId": "{{$guid}}",
+  "windowStartAt": "2026-11-25T03:00:00Z", "candidateSensorNo": 7,
+  "measurement": { "sensorNo": 7, "sensorMac": "88:A2:9E:9B:5F:09",
+    "measuredAt": "2026-11-25T03:00:00Z", "collectedAt": "2026-11-25T03:00:03Z", "rssiDbm": -55,
+    "temperatureC": 29.5, "humidityRh": 55, "co2Ppm": null, "eco2Ppm": 710, "aqi": 2, "tvocPpb": 200 },
+  "publicRoute": "UPLOADED", "publicId": 123 } }
+
+
+### C2. C1 재전송 (DB 타임아웃 후 같은 요청)
+# 기대: C1과 같은 결과 + replayed true. 먹이가 다시 늘지 않음
+POST {{url}}/rest/v1/rpc/commit_collection
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_input": {
+  "collectionId": "{{c1.request.body.$.p_input.collectionId}}", "userId": "{{userId}}",
+  "windowId": "{{c1.request.body.$.p_input.windowId}}",
+  "windowStartAt": "2026-11-25T03:00:00Z", "candidateSensorNo": 7,
+  "measurement": { "sensorNo": 7, "sensorMac": "88:A2:9E:9B:5F:09",
+    "measuredAt": "2026-11-25T03:00:00Z", "collectedAt": "2026-11-25T03:00:03Z", "rssiDbm": -55,
+    "temperatureC": 29.5, "humidityRh": 55, "co2Ppm": null, "eco2Ppm": 710, "aqi": 2, "tvocPpb": 200 },
+  "publicRoute": "UPLOADED", "publicId": 123 } }
+
+
+### C3. 같은 collectionId 에 다른 내용 (RSSI 만 다름)
+# 기대: 409, ID_CONFLICT
+POST {{url}}/rest/v1/rpc/commit_collection
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_input": {
+  "collectionId": "{{c1.request.body.$.p_input.collectionId}}", "userId": "{{userId}}",
+  "windowId": "{{c1.request.body.$.p_input.windowId}}",
+  "windowStartAt": "2026-11-25T03:00:00Z", "candidateSensorNo": 7,
+  "measurement": { "sensorNo": 7, "sensorMac": "88:A2:9E:9B:5F:09",
+    "measuredAt": "2026-11-25T03:00:00Z", "collectedAt": "2026-11-25T03:00:03Z", "rssiDbm": -60,
+    "temperatureC": 29.5, "humidityRh": 55, "co2Ppm": null, "eco2Ppm": 710, "aqi": 2, "tvocPpb": 200 },
+  "publicRoute": "UPLOADED", "publicId": 123 } }
+
+
+### C4. 같은 구간 W1 의 다른 센서 15번 (후보가 아님)
+# 기대: credited false, grants [], measurementAdded true (환경 표본은 저장)
+POST {{url}}/rest/v1/rpc/commit_collection
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_input": {
+  "collectionId": "{{$guid}}", "userId": "{{userId}}",
+  "windowId": "{{c1.request.body.$.p_input.windowId}}",
+  "windowStartAt": "2026-11-25T03:00:00Z", "candidateSensorNo": 7,
+  "measurement": { "sensorNo": 15, "sensorMac": "88:A2:9E:9B:5F:15",
+    "measuredAt": "2026-11-25T03:00:01Z", "collectedAt": "2026-11-25T03:00:04Z", "rssiDbm": -72,
+    "temperatureC": 21.0, "humidityRh": 50, "co2Ppm": null, "eco2Ppm": 650, "aqi": 1, "tvocPpb": 100 },
+  "publicRoute": "UPLOADED", "publicId": 124 } }
+
+
+### C5. 다른 폰의 겹치는 구간 [T+5s, T+15s)
+# 기대: credited false (W1 과 겹침), grants []
+POST {{url}}/rest/v1/rpc/commit_collection
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_input": {
+  "collectionId": "{{$guid}}", "userId": "{{userId}}", "windowId": "{{$guid}}",
+  "windowStartAt": "2026-11-25T03:00:05Z", "candidateSensorNo": 15,
+  "measurement": { "sensorNo": 15, "sensorMac": "88:A2:9E:9B:5F:15",
+    "measuredAt": "2026-11-25T03:00:05Z", "collectedAt": "2026-11-25T03:00:06Z", "rssiDbm": -60,
+    "temperatureC": 21.0, "humidityRh": 50, "co2Ppm": null, "eco2Ppm": 650, "aqi": 1, "tvocPpb": 100 },
+  "publicRoute": "UPLOADED", "publicId": 125 } }
+
+
+### C6. 맞닿은 구간 [T+10s, T+20s) 은 겹치지 않는다
+# 기대: credited true, grants [FIRST_SENSOR_DAY 2] (15번 오늘 첫 기여), foodBalance 4, normalRemainder 2
+POST {{url}}/rest/v1/rpc/commit_collection
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_input": {
+  "collectionId": "{{$guid}}", "userId": "{{userId}}", "windowId": "{{$guid}}",
+  "windowStartAt": "2026-11-25T03:00:10Z", "candidateSensorNo": 15,
+  "measurement": { "sensorNo": 15, "sensorMac": "88:A2:9E:9B:5F:15",
+    "measuredAt": "2026-11-25T03:00:10Z", "collectedAt": "2026-11-25T03:00:11Z", "rssiDbm": -60,
+    "temperatureC": 21.0, "humidityRh": 50, "co2Ppm": null, "eco2Ppm": 650, "aqi": 1, "tvocPpb": 100 },
+  "publicRoute": "UPLOADED", "publicId": 126 } }
+
+
+### C7. 31번 (온습도 고장): 공용 전송 생략, 원시 온습도 0
+# 기대: credited true, grants [FIRST_SENSOR_DAY 2], 저장된 온습도는 null
+POST {{url}}/rest/v1/rpc/commit_collection
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_input": {
+  "collectionId": "{{$guid}}", "userId": "{{userId}}", "windowId": "{{$guid}}",
+  "windowStartAt": "2026-11-25T03:00:20Z", "candidateSensorNo": 31,
+  "measurement": { "sensorNo": 31, "sensorMac": "B8:27:EB:D3:40:06",
+    "measuredAt": "2026-11-25T03:00:20Z", "collectedAt": "2026-11-25T03:00:23Z", "rssiDbm": -53,
+    "temperatureC": 0, "humidityRh": 0, "co2Ppm": null, "eco2Ppm": 715, "aqi": 2, "tvocPpb": 200 },
+  "publicRoute": "TEMP_UNAVAILABLE", "publicId": null } }
+
+
+### C8. 음영지역 센서 1번 (연구실, 처음엔 01~05가 음영)
+# 기대: credited true, isShadowBefore true, grants [FIRST_SENSOR_DAY 2], shadowRemainder 1
+POST {{url}}/rest/v1/rpc/commit_collection
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_input": {
+  "collectionId": "{{$guid}}", "userId": "{{userId}}", "windowId": "{{$guid}}",
+  "windowStartAt": "2026-11-25T03:00:30Z", "candidateSensorNo": 1,
+  "measurement": { "sensorNo": 1, "sensorMac": "B8:27:EB:00:00:01",
+    "measuredAt": "2026-11-25T03:00:30Z", "collectedAt": "2026-11-25T03:00:31Z", "rssiDbm": -60,
+    "temperatureC": 20.0, "humidityRh": null, "co2Ppm": 700, "eco2Ppm": null, "aqi": null, "tvocPpb": null },
+  "publicRoute": "UPLOADED", "publicId": 127 } }
+
+
+### C9. 약한 신호 -86 dBm
+# 기대: 400, INVALID_INPUT
+POST {{url}}/rest/v1/rpc/commit_collection
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_input": {
+  "collectionId": "{{$guid}}", "userId": "{{userId}}", "windowId": "{{$guid}}",
+  "windowStartAt": "2026-11-25T03:00:40Z", "candidateSensorNo": 1,
+  "measurement": { "sensorNo": 1, "sensorMac": "B8:27:EB:00:00:01",
+    "measuredAt": "2026-11-25T03:00:40Z", "collectedAt": "2026-11-25T03:00:41Z", "rssiDbm": -86,
+    "temperatureC": 20.0, "humidityRh": null, "co2Ppm": 700, "eco2Ppm": null, "aqi": null, "tvocPpb": null },
+  "publicRoute": "UPLOADED", "publicId": 128 } }
+
+
+### C10. 테스트 모드 (DC-7)
+# 기대: credited false, grants [], 운영 먹이·카운터 그대로
+POST {{url}}/rest/v1/rpc/commit_collection
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_test": true, "p_input": {
+  "collectionId": "{{$guid}}", "userId": "{{userId}}", "windowId": "{{$guid}}",
+  "windowStartAt": "2026-11-25T03:01:00Z", "candidateSensorNo": 7,
+  "measurement": { "sensorNo": 7, "sensorMac": "88:A2:9E:9B:5F:09",
+    "measuredAt": "2026-11-25T03:01:00Z", "collectedAt": "2026-11-25T03:01:01Z", "rssiDbm": -55,
+    "temperatureC": 29.5, "humidityRh": 55, "co2Ppm": null, "eco2Ppm": 710, "aqi": 2, "tvocPpb": 200 },
+  "publicRoute": "UPLOADED", "publicId": 129 } }
+
+
+### C11. 음영지역 조회 (getShadowSites)
+# 기대: sites 5곳 (측정 수 오름차순·번호순), updatedAt = 마지막 측정 저장 시각
+POST {{url}}/rest/v1/rpc/get_shadow_sites
+apikey: {{key}}
+Content-Type: application/json
+
+{}

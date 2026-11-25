@@ -15,8 +15,8 @@ Supabase(PostgreSQL) 팀 DB. **기준 문서는 [`docs/api-contract.md`](../docs
 | `registerUser` | `register_user(p_request_id, p_nickname)` | ✅ |
 | `loginByNickname` | `login_by_nickname(p_nickname)` | ✅ |
 | `getUserState` | `get_user_state(p_user_id)` | ✅ |
-| `commitCollection` | | 🔲 3단계 |
-| `getShadowSites` | | 🔲 3단계 |
+| `commitCollection` | `commit_collection(p_input, p_test)` — `p_input`은 계약서 §06 요청 JSON 그대로 | ✅ |
+| `getShadowSites` | `get_shadow_sites()` | ✅ |
 | `submitFeedback` | | 🔲 4단계 |
 | `feedPet`, `drawCostume`, `equipCostume`, `getRanking` | | 🔲 5단계 |
 | `getSiteEnvironment`, `getAnalysisInputs` | | 🔲 6단계 |
@@ -32,7 +32,9 @@ Supabase(PostgreSQL) 팀 DB. **기준 문서는 [`docs/api-contract.md`](../docs
 backend/
 ├── supabase/migrations/   # DB 변경 기록. 파일 이름 순서대로 한 번씩만 실행
 │   ├── 20261118 ~ 20261122_*.sql            # (폐기) 익명 로그인 방식의 초기 구조
-│   └── 20261125000000_contract_v12_users.sql # 계약서 v1.2 재구성: 사용자·펫·닉네임 접속
+│   ├── 20261125000000_contract_v12_users.sql        # 계약서 v1.2 재구성: 사용자·펫·닉네임 접속
+│   └── 20261125010000_contract_v12_collections.sql  # 수집 저장·음영지역·수집 보상
+├── supabase/dev_reset.sql   # ⚠️ 개발용: 운영 데이터 전체 초기화 (필요할 때만 수동 실행)
 └── tests/
     ├── api.http        # REST Client 테스트 (위에서부터 순서대로 Send Request)
     └── .env.example    # .env 로 복사해 URL·키 입력 (.env 는 커밋 안 함)
@@ -43,4 +45,4 @@ backend/
 1. 마이그레이션은 **새 파일**로 만든다. 이미 실행한 파일은 고치지 않는다.
 2. Supabase SQL Editor 새 탭에 붙여넣고 Run (= 배포).
 3. `tests/api.http`로 확인한 뒤 커밋한다.
-4. 테스트 사용자 정리: `delete from public.users where nickname like 't%';`
+4. 테스트 데이터 정리: `supabase/dev_reset.sql` 실행 (사용자·수집·측정·지급 전부 삭제, 센서 측정 수 0)
