@@ -581,3 +581,62 @@ apikey: {{key}}
 Content-Type: application/json
 
 { "p_user_id": "{{drawUserId}}" }
+
+
+### ---------------------------------------------------------------------
+### [6단계] 조회: 선택 지점 환경값 (§10) · 집계 원자료 (§12)
+### ---------------------------------------------------------------------
+
+### E1. 7번 지점 환경값 (3단계 C1 에서 29.5℃·55% 저장)
+# 기대: temperatureC·humidityRh·eco2Ppm 과 각각의 측정 시각
+POST {{url}}/rest/v1/rpc/get_site_environment
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_sensor_no": 7 }
+
+
+### E2. 31번 (온습도 고장)
+# 기대: temperatureC·humidityRh 와 그 시각은 null, eco2Ppm 은 값 있음
+POST {{url}}/rest/v1/rpc/get_site_environment
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_sensor_no": 31 }
+
+
+### E3. 측정이 없는 지점 (34번)
+# 기대: 200, siteName "sensor 34", 값·시각 모두 null
+POST {{url}}/rest/v1/rpc/get_site_environment
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_sensor_no": 34 }
+
+
+### E4. 등록되지 않은 번호
+# 기대: 400, INVALID_INPUT
+POST {{url}}/rest/v1/rpc/get_site_environment
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_sensor_no": 99 }
+
+
+### A1. 집계 원자료 (조회일 2026-11-25 포함 14일)
+# 기대: samples [{sensorNo, measuredAt, temperatureC, humidityRh}], feedbacks [{feedbackId, sensorNo, collectedAt, feltTemp, feltHumidity, issues}]
+#       메모·userId 는 없음
+POST {{url}}/rest/v1/rpc/get_analysis_inputs
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_as_of_date": "2026-11-25" }
+
+
+### A2. 조회일 없음
+# 기대: 400, INVALID_INPUT
+POST {{url}}/rest/v1/rpc/get_analysis_inputs
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_as_of_date": null }

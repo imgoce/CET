@@ -22,7 +22,8 @@ Supabase(PostgreSQL) 팀 DB. **기준 문서는 [`docs/api-contract.md`](../docs
 | `drawCostume` | `draw_costume(p_user_id, p_request_id)` | ✅ |
 | `equipCostume` | `equip_costume(p_user_id, p_request_id, p_costume)` — `null`이면 벗기기 | ✅ |
 | `getRanking` | `get_ranking(p_user_id)` | ✅ |
-| `getSiteEnvironment`, `getAnalysisInputs` | | 🔲 6단계 |
+| `getSiteEnvironment` | `get_site_environment(p_sensor_no)` | ✅ |
+| `getAnalysisInputs` | `get_analysis_inputs(p_as_of_date)` — `"YYYY-MM-DD"` (KST 조회일) | ✅ |
 
 - 응답 JSON의 필드 이름은 계약서와 같다 (`userId`, `foodBalance`, `stage: "EGG"` …).
 - 실패: HTTP 4xx + `{ "message": "<계약서 오류 코드>", "details": "<설명>" }`.
@@ -38,7 +39,8 @@ backend/
 │   ├── 20261125000000_contract_v12_users.sql        # 계약서 v1.2 재구성: 사용자·펫·닉네임 접속
 │   ├── 20261125010000_contract_v12_collections.sql  # 수집 저장·음영지역·수집 보상
 │   ├── 20261125020000_contract_v12_feedback.sql     # 현장 피드백·보상
-│   └── 20261125030000_contract_v12_pet.sql          # 먹이 주기·장식 뽑기·착용·랭킹
+│   ├── 20261125030000_contract_v12_pet.sql          # 먹이 주기·장식 뽑기·착용·랭킹
+│   └── 20261125040000_contract_v12_queries.sql      # 선택 지점 환경값·집계 원자료 조회
 ├── supabase/dev_reset.sql   # ⚠️ 개발용: 운영 데이터 전체 초기화 (필요할 때만 수동 실행)
 └── tests/
     ├── api.http        # REST Client 테스트 (위에서부터 순서대로 Send Request)
