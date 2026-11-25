@@ -8,6 +8,7 @@
 -- 실제 사용자가 생긴 뒤에는 절대 실행하지 않는다.
 
 truncate table
+    public.pet_requests,
     public.feedbacks,
     public.grants,
     public.first_sensor_days,

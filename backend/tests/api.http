@@ -411,3 +411,173 @@ Content-Type: application/json
 { "p_input": {
   "feedbackId": "{{$guid}}", "collectionId": "{{c1.response.body.$.collectionId}}", "userId": "{{userId}}",
   "feltTemp": "OK", "feltHumidity": "OK", "issues": ["NONE"], "memo": null } }
+
+
+### ---------------------------------------------------------------------
+### [5단계] 먹이·장식·랭킹 (§11)   U1 사용자로 이어서 한다 (먹이가 1개 이상 있어야 함)
+### ---------------------------------------------------------------------
+
+### P1. 먹이 주기 (GR-1, GR-2)
+# 기대: pet.foodBalance -1, progress +1 (Lv1 진행도 1이었다면 Lv2·진행도 0, leveledUp true)
+# @name feed1
+POST {{url}}/rest/v1/rpc/feed_pet
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_user_id": "{{userId}}", "p_request_id": "{{$guid}}" }
+
+
+### P2. P1 재전송 (같은 requestId)
+# 기대: P1과 같은 결과 + replayed true. 먹이가 또 줄지 않음
+POST {{url}}/rest/v1/rpc/feed_pet
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_user_id": "{{userId}}", "p_request_id": "{{feed1.request.body.$.p_request_id}}" }
+
+
+### P3. 같은 requestId 로 다른 작업(뽑기)
+# 기대: 409, ID_CONFLICT
+POST {{url}}/rest/v1/rpc/draw_costume
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_user_id": "{{userId}}", "p_request_id": "{{feed1.request.body.$.p_request_id}}" }
+
+
+### P4. Lv 16 미만에서 뽑기
+# 기대: 403, LEVEL_LOCKED
+POST {{url}}/rest/v1/rpc/draw_costume
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_user_id": "{{userId}}", "p_request_id": "{{$guid}}" }
+
+
+### P5. 보유하지 않은 장식 착용
+# 기대: 403, NOT_OWNED
+POST {{url}}/rest/v1/rpc/equip_costume
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_user_id": "{{userId}}", "p_request_id": "{{$guid}}", "p_costume": "STAR" }
+
+
+### P6. 없는 장식 코드
+# 기대: 400, INVALID_INPUT
+POST {{url}}/rest/v1/rpc/equip_costume
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_user_id": "{{userId}}", "p_request_id": "{{$guid}}", "p_costume": "HAT" }
+
+
+### P7. 장식 벗기기 (costume = null)
+# 기대: 200, pet.equippedCostume null
+POST {{url}}/rest/v1/rpc/equip_costume
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_user_id": "{{userId}}", "p_request_id": "{{$guid}}", "p_costume": null }
+
+
+### P8. 랭킹 (RK-1, RK-2)
+# 기대: top 최대 50명 { rank, nickname, level, progress, stage }, me 는 내 줄. userId 는 없음
+POST {{url}}/rest/v1/rpc/get_ranking
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_user_id": "{{userId}}" }
+
+
+### ---------------------------------------------------------------------
+### [5단계-뽑기] 성체 진화·장식 뽑기·착용
+###   준비: SQL Editor 에서 아래 한 줄로 테스트 펫을 Lv15·진행도15·먹이200 으로 만든다 (닉네임은 바꿔도 됨)
+###   update public.pets set level = 15, progress = 15, food_balance = 200
+###   where user_id = (select user_id from public.users where nickname = 'tdraw4891');
+### ---------------------------------------------------------------------
+
+@drawNick = tdraw4891
+@drawUserId = {{drawer.response.body.$.userId}}
+
+### D0. 테스트 펫 사용자로 접속
+# 기대: pet.level 15, progress 15, foodBalance 200
+# @name drawer
+POST {{url}}/rest/v1/rpc/login_by_nickname
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_nickname": "{{drawNick}}" }
+
+
+### D1. 먹이 1개 → Lv 16 성체 진화 (GR-3)
+# 기대: pet.level 16, stage "ADULT", leveledUp true, evolved true, foodBalance 199
+POST {{url}}/rest/v1/rpc/feed_pet
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_user_id": "{{drawUserId}}", "p_request_id": "{{$guid}}" }
+
+
+### D2. 첫 뽑기 (CS-2)
+# 기대: spentFood 24, drawCount 1, nextDrawCost 25, ownedCostumes 1개, level·progress 그대로
+# @name draw1
+POST {{url}}/rest/v1/rpc/draw_costume
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_user_id": "{{drawUserId}}", "p_request_id": "{{$guid}}" }
+
+
+### D3. D2 재전송
+# 기대: D2와 같은 drawnCostume, replayed true (다시 추첨·차감하지 않음)
+POST {{url}}/rest/v1/rpc/draw_costume
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_user_id": "{{drawUserId}}", "p_request_id": "{{draw1.request.body.$.p_request_id}}" }
+
+
+### D4. 뽑기 → 이 요청을 3번 누른다
+# 기대: spentFood 25 → 26 → 27, 3번째 뒤 ownedCostumes 4개 (중복 없음)
+POST {{url}}/rest/v1/rpc/draw_costume
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_user_id": "{{drawUserId}}", "p_request_id": "{{$guid}}" }
+
+
+### D5. 모두 보유한 뒤 뽑기
+# 기대: 409, ALL_OWNED (먹이·횟수·가격 그대로)
+POST {{url}}/rest/v1/rpc/draw_costume
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_user_id": "{{drawUserId}}", "p_request_id": "{{$guid}}" }
+
+
+### D6. 첫 뽑기 장식 착용 (CS-3)
+# 기대: equippedCostume = D2의 drawnCostume
+POST {{url}}/rest/v1/rpc/equip_costume
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_user_id": "{{drawUserId}}", "p_request_id": "{{$guid}}", "p_costume": "{{draw1.response.body.$.drawnCostume}}" }
+
+
+### D7. 다른 장식으로 교체 (한 번에 1개만)
+# 기대: equippedCostume "CROWN" (이전 장식은 자동 해제)
+POST {{url}}/rest/v1/rpc/equip_costume
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_user_id": "{{drawUserId}}", "p_request_id": "{{$guid}}", "p_costume": "CROWN" }
+
+
+### D8. 랭킹에서 테스트 펫 확인
+# 기대: top 1위가 이 펫 (Lv 16), me 도 같은 줄
+POST {{url}}/rest/v1/rpc/get_ranking
+apikey: {{key}}
+Content-Type: application/json
+
+{ "p_user_id": "{{drawUserId}}" }
