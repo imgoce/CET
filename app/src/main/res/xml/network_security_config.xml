@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  수업 공용 서버(API 1·2)는 http 만 제공하므로 이 주소에만 평문 통신을 허용한다.
+  나머지(팀 DB Supabase 등)는 https 만 허용한다.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">203.255.81.72</domain>
+    </domain-config>
+</network-security-config>
