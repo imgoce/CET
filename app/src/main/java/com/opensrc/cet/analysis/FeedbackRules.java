@@ -50,8 +50,7 @@ public final class FeedbackRules {
             String feltTemp, String feltHumidity, List<String> issues, String memo,
             Instant submittedAt, History history) {
         if (feedbackId == null || collectionId == null || userId == null || submittedAt == null
-                || !TEMPERATURES.contains(feltTemp) || !HUMIDITIES.contains(feltHumidity)
-                || !validIssues(issues)
+                || !validAnswers(feltTemp, feltHumidity, issues)
                 || (memo != null && memo.codePointCount(0, memo.length()) > MAX_MEMO_CODE_POINTS)) {
             return new Decision(ErrorCode.INVALID_INPUT, null);
         }
@@ -86,8 +85,13 @@ public final class FeedbackRules {
         return new Decision(null, normalizedMemo);
     }
 
-    private static boolean validIssues(List<String> issues) {
-        if (issues == null || issues.isEmpty()) {
+    static int issueOrder(String issue) {
+        return ISSUES.indexOf(issue);
+    }
+
+    static boolean validAnswers(String feltTemp, String feltHumidity, List<String> issues) {
+        if (!TEMPERATURES.contains(feltTemp) || !HUMIDITIES.contains(feltHumidity)
+                || issues == null || issues.isEmpty()) {
             return false;
         }
         Set<String> seen = new HashSet<>();
